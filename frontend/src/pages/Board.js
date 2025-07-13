@@ -1,6 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import io from 'socket.io-client';
 import '../Board.css';
 
 const API = process.env.REACT_APP_API_URL ? `${process.env.REACT_APP_API_URL}/api` : '/api';
@@ -45,13 +44,25 @@ export default function Board() {
   const [newTask, setNewTask] = useState({ title: '', description: '', priority: 'Medium' });
   const socketRef = useRef();
   const [loading, setLoading] = useState(true);
-  // Socket.IO setup
+  
+  // Socket.IO setup with error handling
   useEffect(() => {
-    const socketUrl = process.env.REACT_APP_SOCKET_URL || '/';
-    socketRef.current = io(socketUrl, { transports: ['websocket'] });
-    socketRef.current.on('task:update', loadAll);
-    return () => socketRef.current.disconnect();
-    // eslint-disable-next-line
+    let socket;
+    try {
+      const io = require('socket.io-client');
+      const socketUrl = process.env.REACT_APP_SOCKET_URL || '/';
+      socket = io(socketUrl, { transports: ['websocket'] });
+      socket.on('task:update', loadAll);
+      socketRef.current = socket;
+    } catch (error) {
+      console.warn('Socket.IO not available:', error);
+    }
+    
+    return () => {
+      if (socket) {
+        socket.disconnect();
+      }
+    };
   }, []);
 
   // Load all data
@@ -91,6 +102,7 @@ export default function Board() {
       setLoading(false);
     });
   }
+  
   useEffect(loadAll, []);
 
   function logout() {
@@ -114,7 +126,6 @@ export default function Board() {
 
   function startEdit(task) {
     setEditing(task._id);
-    // Only copy the fields we need for editing
     setEditData({
       title: task.title,
       description: task.description,
@@ -133,7 +144,6 @@ export default function Board() {
   }
 
   async function handleEditSave() {
-    // Only send the fields that the backend expects
     const payload = {
       title: editData.title,
       description: editData.description,
@@ -170,10 +180,10 @@ export default function Board() {
     loadAll();
   }
 
-  // Drag and drop logic
   function onDragStart(e, task) {
     e.dataTransfer.setData('taskId', task._id);
   }
+  
   async function onDrop(e, status) {
     const id = e.dataTransfer.getData('taskId');
     const task = tasks.find(t => t._id === id);
@@ -193,7 +203,6 @@ export default function Board() {
     }
   }
 
-  // Conflict resolution UI
   function renderConflict() {
     if (!conflict) return null;
     return (
@@ -210,7 +219,6 @@ export default function Board() {
           </div>
         </div>
         <button onClick={() => {
-          // Only copy the fields we need for editing
           setEditData({
             title: conflict.serverTask.title,
             description: conflict.serverTask.description,
@@ -220,9 +228,8 @@ export default function Board() {
             version: conflict.serverTask.version
           });
           setConflict(null);
-        }}>Use Server Version (Overwrite)</button>
+        }}>Use Server Version</button>
         <button onClick={() => {
-          // Only copy the fields we need for editing
           setEditData({
             title: conflict.clientTask.title,
             description: conflict.clientTask.description,
@@ -232,13 +239,12 @@ export default function Board() {
             version: conflict.clientTask.version
           });
           setConflict(null);
-        }}>Keep My Version (Overwrite)</button>
+        }}>Keep My Version</button>
         <button onClick={cancelEdit}>Cancel</button>
       </div>
     );
   }
 
-  // Render board columns
   function renderColumn(status) {
     return (
       <div
@@ -254,7 +260,6 @@ export default function Board() {
             className={`task-card priority-${task.priority.toLowerCase()}`}
             draggable
             onDragStart={e => onDragStart(e, task)}
-            style={{ animation: 'cardEnter 0.4s' }}
           >
             {editing === task._id ? (
               <div className="edit-task-form">
@@ -344,7 +349,6 @@ export default function Board() {
   );
 }
 
-// Helper functions at the bottom of the file:
 function capitalize(str) {
   return str.charAt(0).toUpperCase() + str.slice(1);
 }
